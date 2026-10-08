@@ -220,6 +220,24 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
         sender.sendMessage("FallDistance: " + controller.getFallDistance());
         sender.sendMessage("Tick status: " + (body.isSpawned() ? "active" : "inactive")
                 + ", entity ticks=" + body.getEntity().getPhysicalTickCount());
+        var diagnostics = body.getEntity().getLastTickDiagnostics();
+        sender.sendMessage("Movement input: xxa before=" + diagnostics.strafeInputBefore()
+                + ", zza before=" + diagnostics.forwardInputBefore()
+                + ", xxa after=" + diagnostics.strafeInputAfter()
+                + ", zza after=" + diagnostics.forwardInputAfter());
+        sender.sendMessage("Movement gates: immobile=" + diagnostics.immobile()
+                + ", canSimulateMovement=" + diagnostics.canSimulateMovement()
+                + ", effectiveAi=" + diagnostics.effectiveAi()
+                + ", removed=" + diagnostics.removed()
+                + ", spectator=" + diagnostics.spectator());
+        sender.sendMessage("Last tick position: before=" + format(diagnostics.positionBefore())
+                + ", after=" + format(diagnostics.positionAfter()));
+        sender.sendMessage("Last tick delta: before=" + format(diagnostics.deltaBefore())
+                + ", after=" + format(diagnostics.deltaAfter()));
+        sender.sendMessage("Controller state: forward=" + controller.getConfiguredForwardInput()
+                + ", strafe=" + controller.getConfiguredStrafeInput()
+                + ", sprint=" + controller.isConfiguredSprinting()
+                + ", sneak=" + controller.isConfiguredSneaking());
         sender.sendMessage("Connection: " + body.hasConnection()
                 + ", lifecycle=" + body.getConnectionLifecycleState());
         sender.sendMessage("Channel: " + body.hasChannel()

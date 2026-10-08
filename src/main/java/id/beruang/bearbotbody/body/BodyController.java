@@ -164,6 +164,22 @@ public final class BodyController {
         return body.isShiftKeyDown();
     }
 
+    public float getConfiguredForwardInput() {
+        return forwardInput;
+    }
+
+    public float getConfiguredStrafeInput() {
+        return strafeInput;
+    }
+
+    public boolean isConfiguredSprinting() {
+        return sprinting;
+    }
+
+    public boolean isConfiguredSneaking() {
+        return sneaking;
+    }
+
     public double getFallDistance() {
         return body.fallDistance;
     }
