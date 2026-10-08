@@ -1,0 +1,13 @@
+name: BearBotBody
+version: 0.1.0-SNAPSHOT
+main: id.beruang.bearbotbody.BearBotBodyPlugin
+api-version: '1.21'
+description: BearBot Body physical-layer prototype
+authors:
+  - BearCraft
+commands:
+  bot:
+    description: Control the BearBot physical body
+    usage: /bot spawn | /bot despawn | /bot look <player> | /bot move <forward|backward|left|right> | /bot stop | /bot jump | /bot sprint [on|off] | /bot sneak [on|off] | /bot debug
+    aliases:
+      - bearbotbody
