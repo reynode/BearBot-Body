@@ -1,9 +1,11 @@
 package id.beruang.bearbotbody;
 
+import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 import id.beruang.bearbotbody.body.BearBotBody;
 import net.kyori.adventure.text.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -11,12 +13,14 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.CraftWorld;
+import org.bukkit.craftbukkit.entity.CraftEntity;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -24,6 +28,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +36,7 @@ import java.util.Locale;
 public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
 
     private BearBotBody body;
+    private BukkitTask removalCleanupTask;
 
     @Override
     public void onEnable() {
@@ -41,6 +47,10 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
+        if (removalCleanupTask != null) {
+            removalCleanupTask.cancel();
+            removalCleanupTask = null;
+        }
         despawnBody();
         getLogger().info("BearBot Body disabled.");
     }
@@ -54,6 +64,26 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("look")) {
             return lookAt(sender, args[1]);
+        }
+        if (args.length == 4 && args[0].equalsIgnoreCase("look")) {
+            return lookAt(sender, args[1], args[2], args[3]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("attack")) {
+            return attack(sender, args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("interact")) {
+            return interact(sender, args[1]);
+        }
+        if (args.length == 1 && args[0].equalsIgnoreCase("use")) {
+            return useItem(sender, InteractionHand.MAIN_HAND);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("use")) {
+            if (args[1].equalsIgnoreCase("off")) {
+                return useItem(sender, InteractionHand.OFF_HAND);
+            }
+            if (args[1].equalsIgnoreCase("main")) {
+                return useItem(sender, InteractionHand.MAIN_HAND);
+            }
         }
         if (args.length == 1 && args[0].equalsIgnoreCase("debug")) {
             return debug(sender);
@@ -79,7 +109,7 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
         if (args.length == 2 && args[0].equalsIgnoreCase("sneak")) {
             return setToggle(sender, args[1], false);
         }
-        sender.sendMessage("Usage: /bot spawn | /bot despawn | /bot look <player> | /bot move <forward|backward|left|right> | /bot stop | /bot jump | /bot sprint [on|off] | /bot sneak [on|off] | /bot debug");
+        sender.sendMessage("Usage: /bot spawn | /bot despawn | /bot look <player|x y z> | /bot move <forward|backward|left|right> | /bot stop | /bot jump | /bot sprint [on|off] | /bot sneak [on|off] | /bot attack <player> | /bot interact <player> | /bot use [main|off] | /bot debug");
         return true;
     }
 
@@ -130,6 +160,57 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
         }
         body.getController().lookAt(target);
         sender.sendMessage("BearBot is now looking at " + target.getName() + ".");
+        return true;
+    }
+
+    private boolean lookAt(CommandSender sender, String xText, String yText, String zText) {
+        if (!requireSpawned(sender)) {
+            return true;
+        }
+        try {
+            body.getController().lookAt(
+                    Double.parseDouble(xText), Double.parseDouble(yText), Double.parseDouble(zText));
+            sender.sendMessage("BearBot is now looking at " + xText + ", " + yText + ", " + zText + ".");
+        } catch (NumberFormatException exception) {
+            sender.sendMessage("Coordinates must be numbers.");
+        }
+        return true;
+    }
+
+    private boolean attack(CommandSender sender, String playerName) {
+        if (!requireSpawned(sender)) {
+            return true;
+        }
+        Player target = Bukkit.getPlayerExact(playerName);
+        if (target == null || !target.isOnline()) {
+            sender.sendMessage("Player is not online: " + playerName);
+            return true;
+        }
+        boolean attacked = body.getController().attack(((CraftEntity) target).getHandle());
+        sender.sendMessage(attacked ? "BearBot attack action executed." : "BearBot could not attack that target.");
+        return true;
+    }
+
+    private boolean interact(CommandSender sender, String playerName) {
+        if (!requireSpawned(sender)) {
+            return true;
+        }
+        Player target = Bukkit.getPlayerExact(playerName);
+        if (target == null || !target.isOnline()) {
+            sender.sendMessage("Player is not online: " + playerName);
+            return true;
+        }
+        var result = body.getController().interact(
+                ((CraftEntity) target).getHandle(), InteractionHand.MAIN_HAND);
+        sender.sendMessage("BearBot interaction result: " + result);
+        return true;
+    }
+
+    private boolean useItem(CommandSender sender, InteractionHand hand) {
+        if (!requireSpawned(sender)) {
+            return true;
+        }
+        sender.sendMessage("BearBot item use result: " + body.getController().useItem(hand));
         return true;
     }
 
@@ -215,6 +296,16 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
         sender.sendMessage("OnGround: " + controller.isOnGround());
         sender.sendMessage("InWater: " + controller.isInWater());
         sender.sendMessage("InLava: " + controller.isInLava());
+        sender.sendMessage("Swimming: " + controller.isSwimming()
+                + ", air=" + controller.getAirSupply());
+        sender.sendMessage("Alive: " + controller.isAlive()
+                + ", deadOrDying=" + controller.isDeadOrDying()
+                + ", health=" + controller.getHealth());
+        sender.sendMessage("Rotation: yaw=" + controller.getYaw() + ", pitch=" + controller.getPitch());
+        sender.sendMessage("Passenger: " + controller.isPassenger()
+                + ", vehicle=" + (controller.getVehicle() == null
+                ? "none" : controller.getVehicle().getType().toString()));
+        sender.sendMessage("Movement speed: " + controller.getMovementSpeed());
         sender.sendMessage("Sprinting: " + controller.isSprinting());
         sender.sendMessage("Sneaking: " + controller.isSneaking());
         sender.sendMessage("FallDistance: " + controller.getFallDistance());
@@ -234,6 +325,20 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
                 + ", after=" + format(diagnostics.positionAfter()));
         sender.sendMessage("Last tick delta: before=" + format(diagnostics.deltaBefore())
                 + ", after=" + format(diagnostics.deltaAfter()));
+        var movement = body.getEntity().getLastMovementDiagnostics();
+        sender.sendMessage("Vanilla travel: input=" + format(movement.travelInput())
+                + ", speed=" + movement.movementSpeed()
+                + ", airborneSpeed=" + movement.airborneSpeed()
+                + ", yaw=" + movement.yaw());
+        sender.sendMessage("Entity.move: type=" + movement.moverType()
+                + ", requested=" + format(movement.requestedMovement())
+                + ", applied=" + format(movement.appliedMovement()));
+        sender.sendMessage("Movement state: onGround=" + movement.onGround()
+                + ", horizontalCollision=" + movement.horizontalCollision()
+                + ", verticalCollision=" + movement.verticalCollision()
+                + ", noPhysics=" + movement.noPhysics()
+                + ", passenger=" + movement.passenger()
+                + ", controllingPassenger=" + movement.controllingPassenger());
         sender.sendMessage("Controller state: forward=" + controller.getConfiguredForwardInput()
                 + ", strafe=" + controller.getConfiguredStrafeInput()
                 + ", sprint=" + controller.isConfiguredSprinting()
@@ -268,8 +373,35 @@ public final class BearBotBodyPlugin extends JavaPlugin implements Listener {
         if (!(event.getDamager() instanceof Player player) || !isBearBot(event.getEntity())) {
             return;
         }
-        event.setCancelled(true);
         player.sendMessage("BearBot Body: LEFT CLICK detected");
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBearBotDamaged(EntityDamageEvent event) {
+        if (!isBearBot(event.getEntity())) {
+            return;
+        }
+        if (event.getFinalDamage() >= body.getEntity().getHealth()) {
+            getLogger().info("BearBot took lethal damage; vanilla ServerPlayer death flow started.");
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onBearBotRemovedFromWorld(EntityRemoveFromWorldEvent event) {
+        if (body == null || !event.getEntity().getUniqueId().equals(body.getEntity().getUUID())
+                || body.isDespawnInProgress() || removalCleanupTask != null) {
+            return;
+        }
+        BearBotBody removedBody = body;
+        removalCleanupTask = Bukkit.getScheduler().runTask(this, () -> {
+            if (body == removedBody) {
+                removedBody.handleExternalRemoval();
+                if (!removedBody.isSpawned()) {
+                    body = null;
+                }
+            }
+            removalCleanupTask = null;
+        });
     }
 
     private boolean isBearBot(Entity target) {

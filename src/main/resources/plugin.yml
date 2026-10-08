@@ -8,6 +8,6 @@ authors:
 commands:
   bot:
     description: Control the BearBot physical body
-    usage: /bot spawn | /bot despawn | /bot look <player> | /bot move <forward|backward|left|right> | /bot stop | /bot jump | /bot sprint [on|off] | /bot sneak [on|off] | /bot debug
+    usage: /bot spawn | /bot despawn | /bot look <player|x y z> | /bot move <forward|backward|left|right> | /bot stop | /bot jump | /bot sprint [on|off] | /bot sneak [on|off] | /bot attack <player> | /bot interact <player> | /bot use [main|off] | /bot debug
     aliases:
       - bearbotbody

@@ -11,9 +11,16 @@ The body is deliberately not added to the global `PlayerList`. The player profil
 - `/bot spawn`
 - `/bot despawn`
 - `/bot look <player>`
+- `/bot look <x> <y> <z>`
+- `/bot move <forward|backward|left|right>` and `/bot stop`
+- `/bot jump`, `/bot sprint [on|off]`, `/bot sneak [on|off]`
+- `/bot attack <player>`, `/bot interact <player>`, `/bot use [main|off]`
+- `/bot debug`
 
 `/bearbotbody` remains a command alias.
 
-## Current limits
+## Physical controls
 
-The NMS lifecycle and physical tick path have not been runtime-verified on a Paper server in this workspace. Automated navigation, movement commands, Skyblock void safeguards, death/respawn lifecycle, and server-player integration with plugins that depend on global `PlayerList` membership are not implemented.
+`BodyController` exposes the server-side `ServerPlayer` inventory, item-use, block-use, entity interaction, attack, look, movement, health, environment, and passenger state. Movement continues through vanilla `LivingEntity.travel()` and `Entity.move()`; the entity records the latest travel request, collision result, and applied position delta for `/bot debug`.
+
+The body is not registered in the global `PlayerList`. Plugins that require a normal online player session may not treat it as a human player. The NMS lifecycle, physics, interactions, damage, and plugin coexistence still require runtime verification on the target Paper 1.21.8 server. Automated navigation and Brain decisions remain out of scope.

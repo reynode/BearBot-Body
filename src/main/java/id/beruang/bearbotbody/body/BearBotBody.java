@@ -32,6 +32,7 @@ public final class BearBotBody {
     private final PacketSinkConnection connectionShim;
     private boolean spawned;
     private boolean textFilterJoined;
+    private boolean despawnInProgress;
 
     public BearBotBody(MinecraftServer server, ServerLevel level) {
         this.level = Objects.requireNonNull(level, "level");
@@ -63,6 +64,13 @@ public final class BearBotBody {
         controller.setRotation(yaw, pitch);
 
         try {
+            if (!level.hasChunkAt(entity.blockPosition())) {
+                throw new IllegalStateException("BearBot spawn chunk is not loaded");
+            }
+            Entity existing = level.getEntity(entity.getUUID());
+            if (existing != null && existing != entity && !existing.isRemoved()) {
+                throw new IllegalStateException("An entity with BearBot's stable UUID already exists");
+            }
             // ServerEntity handles entity spawn, movement, metadata, and passenger packets. Player
             // profile data still belongs to PlayerList, which this agent intentionally does not join.
             broadcastPlayerInfo(new ClientboundPlayerInfoUpdatePacket(
@@ -93,6 +101,7 @@ public final class BearBotBody {
             return;
         }
 
+        despawnInProgress = true;
         try {
             controller.stop();
             for (Entity passenger : List.copyOf(entity.getPassengers())) {
@@ -102,21 +111,46 @@ public final class BearBotBody {
             level.removePlayerImmediately(entity, Entity.RemovalReason.DISCARDED);
             spawned = false;
         } finally {
-            if (entity.isRemoved()) {
-                spawned = false;
-                try {
-                    removePlayerInfo();
-                } finally {
+            try {
+                if (entity.isRemoved()) {
+                    spawned = false;
                     try {
-                        detachPlayerState();
+                        removePlayerInfo();
                     } finally {
-                        connectionShim.closeSink();
+                        try {
+                            detachPlayerState();
+                        } finally {
+                            connectionShim.closeSink();
+                        }
                     }
+                } else {
+                    connectionShim.closeSink();
                 }
-            } else {
+            } finally {
+                despawnInProgress = false;
+            }
+        }
+    }
+
+    /** Cleans resources if vanilla removes the entity through death or another world lifecycle. */
+    public void handleExternalRemoval() {
+        if (despawnInProgress || !spawned || !entity.isRemoved()) {
+            return;
+        }
+        spawned = false;
+        try {
+            removePlayerInfo();
+        } finally {
+            try {
+                detachPlayerState();
+            } finally {
                 connectionShim.closeSink();
             }
         }
+    }
+
+    public boolean isDespawnInProgress() {
+        return despawnInProgress;
     }
 
     public BodyController getController() {

@@ -6,6 +6,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.phys.Vec3;
 
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,8 @@ public final class BearBotBodyEntity extends ServerPlayer {
     private BodyController controller;
     private long physicalTickCount;
     private TickDiagnostics lastTickDiagnostics = TickDiagnostics.empty();
+    private MovementDiagnostics lastMovementDiagnostics = MovementDiagnostics.empty();
+    private boolean executingTravel;
 
     public BearBotBodyEntity(MinecraftServer server, ServerLevel level) {
         super(server, level, new GameProfile(BEARBOT_UUID, "BearBot"), ClientInformation.createDefault());
@@ -38,6 +41,7 @@ public final class BearBotBodyEntity extends ServerPlayer {
         physicalTickCount++;
         controller.applyMovementInput();
         lastTickDiagnostics = TickDiagnostics.before(this);
+        lastMovementDiagnostics = MovementDiagnostics.empty();
         boolean jumpThisTick = controller.beginJumpForTick();
         try {
             // ServerLevel drives this entity once. ServerPlayer.tick() does not call doTick();
@@ -58,6 +62,35 @@ public final class BearBotBodyEntity extends ServerPlayer {
 
     public TickDiagnostics getLastTickDiagnostics() {
         return lastTickDiagnostics;
+    }
+
+    public MovementDiagnostics getLastMovementDiagnostics() {
+        return lastMovementDiagnostics;
+    }
+
+    /** Captures the vanilla travel call without changing its input or invoking it twice. */
+    @Override
+    public void travel(Vec3 travelVector) {
+        lastMovementDiagnostics = lastMovementDiagnostics.withTravel(this, travelVector);
+        executingTravel = true;
+        try {
+            super.travel(travelVector);
+        } finally {
+            executingTravel = false;
+        }
+    }
+
+    /** Captures the exact request and resolved position delta from vanilla collision movement. */
+    @Override
+    public void move(MoverType type, Vec3 movement) {
+        if (!executingTravel) {
+            super.move(type, movement);
+            return;
+        }
+        Vec3 before = this.position();
+        super.move(type, movement);
+        lastMovementDiagnostics = lastMovementDiagnostics.withMove(
+                this, type, movement, this.position().subtract(before));
     }
 
     void setController(BodyController controller) {
@@ -110,6 +143,43 @@ public final class BearBotBodyEntity extends ServerPlayer {
                     deltaBefore, entity.getDeltaMovement(),
                     positionBefore, entity.position(),
                     immobile, canSimulateMovement, effectiveAi, removed, spectator);
+        }
+    }
+
+    public record MovementDiagnostics(
+            Vec3 travelInput,
+            Vec3 requestedMovement,
+            Vec3 appliedMovement,
+            MoverType moverType,
+            float movementSpeed,
+            float airborneSpeed,
+            float yaw,
+            boolean onGround,
+            boolean horizontalCollision,
+            boolean verticalCollision,
+            boolean noPhysics,
+            boolean passenger,
+            boolean controllingPassenger
+    ) {
+        private static MovementDiagnostics empty() {
+            return new MovementDiagnostics(Vec3.ZERO, Vec3.ZERO, Vec3.ZERO, null,
+                    0.0F, 0.0F, 0.0F, false, false, false, false, false, false);
+        }
+
+        private MovementDiagnostics withTravel(BearBotBodyEntity entity, Vec3 input) {
+            return new MovementDiagnostics(
+                    input, Vec3.ZERO, Vec3.ZERO, null,
+                    entity.getSpeed(), entity.getFlyingSpeed(), entity.getYRot(), entity.onGround(),
+                    false, false, entity.noPhysics, entity.isPassenger(), entity.getControllingPassenger() != null);
+        }
+
+        private MovementDiagnostics withMove(
+                BearBotBodyEntity entity, MoverType type, Vec3 requested, Vec3 applied) {
+            return new MovementDiagnostics(
+                    travelInput, requested, applied, type,
+                    movementSpeed, airborneSpeed, yaw, onGround,
+                    entity.horizontalCollision, entity.verticalCollision, entity.noPhysics,
+                    entity.isPassenger(), entity.getControllingPassenger() != null);
         }
     }
 }

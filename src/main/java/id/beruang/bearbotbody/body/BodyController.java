@@ -1,10 +1,18 @@
 package id.beruang.bearbotbody.body;
 
 import net.minecraft.world.entity.Entity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import org.bukkit.entity.Player;
 
 import java.util.Objects;
+import java.util.List;
 
 /** Server-side physical controls; normal ChunkMap tracking synchronizes entity state to viewers. */
 public final class BodyController {
@@ -136,6 +144,108 @@ public final class BodyController {
         body.stopRiding();
     }
 
+    /** Executes the vanilla ServerPlayer attack path for a Brain-selected target. */
+    public boolean attack(Entity target) {
+        Objects.requireNonNull(target, "target");
+        if (!body.isAlive() || target == body || target.isRemoved() || !target.isAlive()
+                || target.level() != body.level()
+                || body.distanceToSqr(target) > interactionRangeSquared()) {
+            return false;
+        }
+        body.attack(target);
+        body.swing(InteractionHand.MAIN_HAND);
+        return true;
+    }
+
+    /** Executes an entity's normal NMS interaction with this ServerPlayer. */
+    public InteractionResult interact(Entity target, InteractionHand hand) {
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(hand, "hand");
+        if (!body.isAlive() || target.isRemoved() || target.level() != body.level()
+                || body.distanceToSqr(target) > interactionRangeSquared()) {
+            return InteractionResult.PASS;
+        }
+        return body.interactOn(target, hand);
+    }
+
+    /** Executes the ServerPlayerGameMode item use path. */
+    public InteractionResult useItem(InteractionHand hand) {
+        Objects.requireNonNull(hand, "hand");
+        ItemStack held = body.getItemInHand(hand);
+        if (!body.isAlive() || held.isEmpty()) {
+            return InteractionResult.PASS;
+        }
+        return body.gameMode.useItem(body, body.level(), held, hand);
+    }
+
+    /** Executes vanilla block/item use at the specified hit location. */
+    public InteractionResult useItemOn(
+            BlockPos position, Direction face, Vec3 hitLocation, InteractionHand hand) {
+        Objects.requireNonNull(position, "position");
+        Objects.requireNonNull(face, "face");
+        Objects.requireNonNull(hitLocation, "hitLocation");
+        Objects.requireNonNull(hand, "hand");
+        if (!body.isAlive()) {
+            return InteractionResult.PASS;
+        }
+        double blockRange = body.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE);
+        if (hitLocation.distanceToSqr(body.getX(), body.getEyeY(), body.getZ()) > blockRange * blockRange) {
+            return InteractionResult.PASS;
+        }
+        BlockHitResult hit = new BlockHitResult(hitLocation, face, position, false);
+        ItemStack held = body.getItemInHand(hand);
+        return body.gameMode.useItemOn(body, body.level(), held, hand, hit);
+    }
+
+    public void setItemInHand(InteractionHand hand, ItemStack item) {
+        body.setItemInHand(Objects.requireNonNull(hand, "hand"), Objects.requireNonNull(item, "item"));
+    }
+
+    public ItemStack getItemInHand(InteractionHand hand) {
+        return body.getItemInHand(Objects.requireNonNull(hand, "hand"));
+    }
+
+    public net.minecraft.world.entity.player.Inventory getInventory() {
+        return body.getInventory();
+    }
+
+    public List<Entity> getNearbyEntities(double radius) {
+        double boundedRadius = Math.max(0.0, Math.min(128.0, radius));
+        return List.copyOf(body.level().getEntities(body, body.getBoundingBox().inflate(boundedRadius)));
+    }
+
+    public Entity getVehicle() {
+        return body.getVehicle();
+    }
+
+    public boolean isPassenger() {
+        return body.isPassenger();
+    }
+
+    public boolean isAlive() {
+        return body.isAlive();
+    }
+
+    public boolean isDeadOrDying() {
+        return body.isDeadOrDying();
+    }
+
+    public float getHealth() {
+        return body.getHealth();
+    }
+
+    public float getYaw() {
+        return body.getYRot();
+    }
+
+    public float getPitch() {
+        return body.getXRot();
+    }
+
+    public float getMovementSpeed() {
+        return body.getSpeed();
+    }
+
     public Vec3 getPosition() {
         return new Vec3(body.getX(), body.getY(), body.getZ());
     }
@@ -154,6 +264,14 @@ public final class BodyController {
 
     public boolean isInLava() {
         return body.isInLava();
+    }
+
+    public boolean isSwimming() {
+        return body.isSwimming();
+    }
+
+    public int getAirSupply() {
+        return body.getAirSupply();
     }
 
     public boolean isSprinting() {
@@ -190,5 +308,10 @@ public final class BodyController {
 
     private static float clampInput(float value) {
         return Math.max(-1.0F, Math.min(1.0F, value));
+    }
+
+    private double interactionRangeSquared() {
+        double range = body.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
+        return range * range;
     }
 }
